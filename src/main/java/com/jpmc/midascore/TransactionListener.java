@@ -3,6 +3,7 @@ package com.jpmc.midascore;
 import com.jpmc.midascore.component.DatabaseConduit;
 import com.jpmc.midascore.entity.TransactionRecord;
 import com.jpmc.midascore.entity.UserRecord;
+import com.jpmc.midascore.foundation.Incentive;
 import com.jpmc.midascore.foundation.Transaction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,9 @@ public class TransactionListener {
 
     @Autowired
     private DatabaseConduit databaseConduit;
+
+    @Autowired
+    private IncentiveQuerier incentiveQuerier;
 
     @KafkaListener(topics = "${general.kafka-topic}", groupId = "midas-core-group")
     public void listen(Transaction transaction) {
@@ -39,13 +43,15 @@ public class TransactionListener {
             return;
         }
 
+        Incentive incentive = incentiveQuerier.query(transaction);
+
         sender.setBalance(sender.getBalance() - transaction.getAmount());
-        recipient.setBalance(recipient.getBalance() + transaction.getAmount());
+        recipient.setBalance(recipient.getBalance() + transaction.getAmount() + incentive.getAmount());
 
         databaseConduit.save(sender);
         databaseConduit.save(recipient);
-        databaseConduit.save(new TransactionRecord(sender, recipient, transaction.getAmount()));
+        databaseConduit.save(new TransactionRecord(sender, recipient, transaction.getAmount(), incentive.getAmount()));
 
-        logger.info("Processed transaction: {} -> {} amount {}", sender.getName(), recipient.getName(), transaction.getAmount());
+        logger.info("Processed transaction: {} -> {} amount {} incentive {}", sender.getName(), recipient.getName(), transaction.getAmount(), incentive.getAmount());
     }
 }
